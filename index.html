@@ -55,6 +55,17 @@
     .msg { margin-top: 16px; padding: 10px 12px; border-radius: 8px; font-size: .9rem; background: #fef2f2; color: #991b1b; }
     .msg.ok { background: #ecfdf5; color: #065f46; }
     .role { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: .85rem; font-weight: 600; }
+    .menu { display: grid; gap: 8px; margin-top: 18px; }
+    .menu a {
+      display: block;
+      padding: 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      color: #1f2937;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .menu a:hover { border-color: #2563eb; color: #2563eb; }
     .soon { margin-top: 18px; padding: 12px; border-radius: 8px; background: #f9fafb; color: #4b5563; font-size: .9rem; }
   </style>
 </head>
@@ -107,7 +118,10 @@
     <section id="homeView" hidden>
       <h1 id="hello"></h1>
       <p class="sub"><span class="role" id="roleBadge"></span></p>
-      <p class="soon">你的页面正在建设中，很快就好。</p>
+      <nav class="menu">
+        <a href="customers.html">客户 Customers</a>
+      </nav>
+      <p class="soon">其他页面正在建设中，很快就好。</p>
       <button class="secondary" onclick="signOut()">登出 Log out</button>
     </section>
 

@@ -58,6 +58,8 @@ function friendlyError(err) {
   if (/valid email|invalid email|unable to validate email/i.test(msg)) return 'Email 格式不对，请检查。';
   if (/rate limit|too many/i.test(msg)) return '试太多次了，请等几分钟再试。';
   if (/failed to fetch|network/i.test(msg)) return '连不上网络，请检查网络后再试。';
+  if (/customers_name_unique/i.test(msg)) return '这个客户名字已经有了，请换一个名字。';
+  if (/foreign key/i.test(msg)) return '这个客户还有 order，不能删除。';
   if (/row-level security|permission denied/i.test(msg)) return '你没有权限做这件事。';
   return '出了点问题，请再试一次。（' + msg + '）';
 }

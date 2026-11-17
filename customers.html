@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>客户 Customers</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+      background: #f6f7f9;
+      color: #1f2937;
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header a { color: #2563eb; text-decoration: none; font-size: .95rem; }
+    header h1 { font-size: 1.15rem; margin: 0; flex: 1; }
+    main { max-width: 720px; margin: 0 auto; padding: 16px; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+      padding: 18px 16px;
+      margin-bottom: 16px;
+    }
+    h2 { font-size: 1.05rem; margin: 0 0 4px; }
+    label { display: block; font-size: .9rem; margin: 12px 0 6px; font-weight: 500; }
+    input, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus { outline: 2px solid #2563eb; border-color: #2563eb; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+    @media (max-width: 480px) { .row2 { grid-template-columns: 1fr; } }
+    .hint { color: #6b7280; font-size: .85rem; margin: 4px 0 0; }
+    .buttons { display: flex; gap: 8px; margin-top: 16px; }
+    button {
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #fff;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .6; cursor: wait; }
+    button.secondary { background: #e5e7eb; color: #1f2937; }
+    button.danger { background: #fee2e2; color: #b91c1c; }
+    button.small { padding: 6px 12px; font-size: .85rem; }
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: .9rem; background: #fef2f2; color: #991b1b; }
+    .msg.ok { background: #ecfdf5; color: #065f46; }
+    .search { margin-bottom: 12px; }
+    .customer {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.06);
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .customer .info { flex: 1; min-width: 0; }
+    .customer .name { font-weight: 600; }
+    .customer .meta { color: #4b5563; font-size: .9rem; margin-top: 2px; }
+    .customer .notes { color: #6b7280; font-size: .85rem; margin-top: 4px; word-break: break-word; }
+    .customer .actions { display: flex; flex-direction: column; gap: 6px; }
+    .empty { text-align: center; color: #6b7280; padding: 24px 0; }
+    .count { color: #6b7280; font-size: .9rem; margin: 0 0 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html">← 主页</a>
+    <h1>客户 Customers</h1>
+  </header>
+
+  <main hidden id="page">
+    <!-- Add / edit form -->
+    <section class="card">
+      <h2 id="formTitle">新增客户</h2>
+      <form id="customerForm">
+        <label for="name">客户名字 *</label>
+        <input id="name" required maxlength="120">
+        <div class="row2">
+          <div>
+            <label for="phone">电话（WhatsApp 用）</label>
+            <input id="phone" type="tel" placeholder="例如 012-345 6789" maxlength="30">
+          </div>
+          <div id="creditBox">
+            <label for="creditDays">欠款天数</label>
+            <input id="creditDays" type="number" min="0" max="365" step="1">
+            <p class="hint" id="creditHint"></p>
+          </div>
+        </div>
+        <label for="notes">备注</label>
+        <textarea id="notes" rows="2" maxlength="500"></textarea>
+        <div class="buttons">
+          <button type="submit" id="saveBtn">新增客户</button>
+          <button type="button" class="secondary" id="cancelBtn" hidden>取消</button>
+        </div>
+      </form>
+      <p class="msg" id="formMsg" hidden></p>
+    </section>
+
+    <!-- List -->
+    <input class="search" id="search" type="search" placeholder="搜索客户名字或电话…">
+    <p class="count" id="count"></p>
+    <div id="list"></div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    let me = null;
+    let canEdit = false;
+    let canDelete = false;
+    let defaultCredit = 30;
+    let customers = [];
+    let editingId = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    async function start() {
+      me = await requireRole(['staff', 'manager', 'owner']);
+      if (!me) return;
+      const role = me.profile.role;
+      canEdit = role === 'manager' || role === 'owner';
+      canDelete = role === 'owner';
+
+      // Only manager/owner set credit days; staff use the default
+      $('creditBox').hidden = !canEdit;
+
+      const { data: s } = await sb.from('settings').select('value').eq('key', 'default_credit_days').maybeSingle();
+      if (s) defaultCredit = Number(s.value) || 30;
+      $('creditHint').textContent = '空白 = 默认 ' + defaultCredit + ' 天';
+
+      $('page').hidden = false;
+      await load();
+    }
+
+    async function load() {
+      const { data, error } = await sb.from('customers').select('*').order('name');
+      if (error) {
+        $('list').innerHTML = '<p class="msg">' + escapeHtml(friendlyError(error)) + '</p>';
+        return;
+      }
+      customers = data;
+      draw();
+    }
+
+    function draw() {
+      const q = $('search').value.trim().toLowerCase();
+      const rows = customers.filter(c =>
+        !q || c.name.toLowerCase().includes(q) || (c.phone || '').toLowerCase().includes(q));
+
+      $('count').textContent = '共 ' + rows.length + ' 个客户';
+      if (!rows.length) {
+        $('list').innerHTML = '<p class="empty">' + (customers.length ? '找不到这个客户。' : '还没有客户，在上面新增第一个吧。') + '</p>';
+        return;
+      }
+
+      $('list').innerHTML = rows.map(c => {
+        const credit = c.credit_days == null ? '欠款 ' + defaultCredit + ' 天（默认）' : '欠款 ' + c.credit_days + ' 天';
+        const actions = [
+          canEdit ? '<button class="small secondary" data-edit="' + c.id + '">修改</button>' : '',
+          canDelete ? '<button class="small danger" data-del="' + c.id + '">删除</button>' : '',
+        ].join('');
+        return '<div class="customer">'
+          + '<div class="info">'
+          + '<div class="name">' + escapeHtml(c.name) + '</div>'
+          + '<div class="meta">' + (c.phone ? escapeHtml(c.phone) + ' · ' : '') + credit + '</div>'
+          + (c.notes ? '<div class="notes">' + escapeHtml(c.notes) + '</div>' : '')
+          + '</div>'
+          + (actions ? '<div class="actions">' + actions + '</div>' : '')
+          + '</div>';
+      }).join('');
+    }
+
+    function resetForm() {
+      editingId = null;
+      $('customerForm').reset();
+      $('formTitle').textContent = '新增客户';
+      $('saveBtn').textContent = '新增客户';
+      $('cancelBtn').hidden = true;
+    }
+
+    function startEdit(id) {
+      const c = customers.find(x => x.id === id);
+      if (!c) return;
+      editingId = id;
+      $('name').value = c.name;
+      $('phone').value = c.phone || '';
+      $('creditDays').value = c.credit_days ?? '';
+      $('notes').value = c.notes || '';
+      $('formTitle').textContent = '修改客户';
+      $('saveBtn').textContent = '保存修改';
+      $('cancelBtn').hidden = false;
+      showMessage($('formMsg'), '');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      $('name').focus();
+    }
+
+    async function remove(id) {
+      const c = customers.find(x => x.id === id);
+      if (!c) return;
+      if (!confirm('确定要删除客户「' + c.name + '」吗？删除后不能恢复。')) return;
+      const { error } = await sb.from('customers').delete().eq('id', id);
+      if (error) return alert(friendlyError(error));
+      if (editingId === id) resetForm();
+      await load();
+    }
+
+    $('customerForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = $('formMsg');
+      const btn = $('saveBtn');
+      const name = $('name').value.trim();
+      if (!name) return showMessage(msg, '请填客户名字。');
+
+      const row = {
+        name,
+        phone: $('phone').value.trim() || null,
+        notes: $('notes').value.trim() || null,
+      };
+      if (canEdit) {
+        const cd = $('creditDays').value.trim();
+        row.credit_days = cd === '' ? null : Math.round(Number(cd));
+        if (row.credit_days !== null && (isNaN(row.credit_days) || row.credit_days < 0)) {
+          return showMessage(msg, '欠款天数要是 0 或以上的数字。');
+        }
+      }
+
+      btn.disabled = true;
+      showMessage(msg, '');
+      const { error } = editingId
+        ? await sb.from('customers').update(row).eq('id', editingId)
+        : await sb.from('customers').insert(row);
+      btn.disabled = false;
+
+      if (error) return showMessage(msg, friendlyError(error));
+      showMessage(msg, editingId ? '已保存修改。' : '已新增客户「' + name + '」。', 'ok');
+      resetForm();
+      await load();
+    };
+
+    $('cancelBtn').onclick = () => { resetForm(); showMessage($('formMsg'), ''); };
+    $('search').oninput = draw;
+    $('list').onclick = (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      if (b.dataset.edit) startEdit(b.dataset.edit);
+      if (b.dataset.del) remove(b.dataset.del);
+    };
+
+    start();
+  </script>
+</body>
+</html>

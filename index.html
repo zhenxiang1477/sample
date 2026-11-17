@@ -1,27 +1,180 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>sample</title>
+  <title>订单跟进 Orders</title>
   <style>
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+      background: #f6f7f9;
+      color: #1f2937;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: #f6f7f9;
-      color: #1f2937;
       padding: 16px;
-      box-sizing: border-box;
-      text-align: center;
     }
-    h1 { font-size: clamp(1.8rem, 6vw, 3rem); font-weight: 600; margin: 0; }
+    .card {
+      width: 100%;
+      max-width: 400px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.06);
+      padding: 28px 24px;
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    .sub { color: #6b7280; margin: 0 0 20px; font-size: .95rem; }
+    label { display: block; font-size: .9rem; margin: 14px 0 6px; font-weight: 500; }
+    input {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+    input:focus { outline: 2px solid #2563eb; outline-offset: 0; border-color: #2563eb; }
+    button {
+      width: 100%;
+      margin-top: 20px;
+      padding: 12px;
+      border: 0;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .6; cursor: wait; }
+    button.secondary { background: #e5e7eb; color: #1f2937; }
+    .switch { text-align: center; margin-top: 16px; font-size: .9rem; color: #6b7280; }
+    .switch a { color: #2563eb; cursor: pointer; text-decoration: underline; }
+    .msg { margin-top: 16px; padding: 10px 12px; border-radius: 8px; font-size: .9rem; background: #fef2f2; color: #991b1b; }
+    .msg.ok { background: #ecfdf5; color: #065f46; }
+    .role { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: .85rem; font-weight: 600; }
+    .soon { margin-top: 18px; padding: 12px; border-radius: 8px; background: #f9fafb; color: #4b5563; font-size: .9rem; }
   </style>
 </head>
 <body>
-  <h1>sample — coming soon</h1>
+  <main class="card">
+
+    <section id="loading"><p class="sub">载入中… Loading…</p></section>
+
+    <!-- Log in -->
+    <section id="loginView" hidden>
+      <h1>登录 Log in</h1>
+      <p class="sub">订单跟进系统</p>
+      <form id="loginForm">
+        <label for="loginEmail">Email</label>
+        <input id="loginEmail" type="email" autocomplete="email" required>
+        <label for="loginPassword">密码 Password</label>
+        <input id="loginPassword" type="password" autocomplete="current-password" required>
+        <button type="submit">登录 Log in</button>
+      </form>
+      <p class="msg" id="loginMsg" hidden></p>
+      <p class="switch">还没有账号？<a id="toSignup">注册 Sign up</a></p>
+    </section>
+
+    <!-- Sign up -->
+    <section id="signupView" hidden>
+      <h1>注册 Sign up</h1>
+      <p class="sub">注册后要等老板批准才能用。</p>
+      <form id="signupForm">
+        <label for="signupName">名字 Name</label>
+        <input id="signupName" type="text" autocomplete="name" required>
+        <label for="signupEmail">Email</label>
+        <input id="signupEmail" type="email" autocomplete="email" required>
+        <label for="signupPassword">密码 Password（最少 6 个字）</label>
+        <input id="signupPassword" type="password" autocomplete="new-password" minlength="6" required>
+        <button type="submit">注册 Sign up</button>
+      </form>
+      <p class="msg" id="signupMsg" hidden></p>
+      <p class="switch">已经有账号？<a id="toLogin">登录 Log in</a></p>
+    </section>
+
+    <!-- Waiting for owner approval -->
+    <section id="pendingView" hidden>
+      <h1>等待批准</h1>
+      <p class="sub" id="pendingText"></p>
+      <p class="soon">你的账号已经注册好了。老板批准后，重新打开这个页面就可以用了。</p>
+      <button class="secondary" onclick="signOut()">登出 Log out</button>
+    </section>
+
+    <!-- Logged in and approved -->
+    <section id="homeView" hidden>
+      <h1 id="hello"></h1>
+      <p class="sub"><span class="role" id="roleBadge"></span></p>
+      <p class="soon">你的页面正在建设中，很快就好。</p>
+      <button class="secondary" onclick="signOut()">登出 Log out</button>
+    </section>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const views = ['loading', 'loginView', 'signupView', 'pendingView', 'homeView'];
+    function show(id) { views.forEach(v => document.getElementById(v).hidden = v !== id); }
+
+    async function render() {
+      const me = await getMe();
+      if (!me) return show('loginView');
+      const p = me.profile;
+      const name = (p && p.full_name) || me.user.email;
+      if (!p || !p.active) {
+        document.getElementById('pendingText').textContent = name + '，你好！';
+        return show('pendingView');
+      }
+      document.getElementById('hello').textContent = name + '，你好！';
+      document.getElementById('roleBadge').textContent = ROLE_NAMES[p.role] || p.role;
+      show('homeView');
+    }
+
+    document.getElementById('toSignup').onclick = () => show('signupView');
+    document.getElementById('toLogin').onclick = () => show('loginView');
+
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      const msg = document.getElementById('loginMsg');
+      btn.disabled = true;
+      showMessage(msg, '');
+      const { error } = await sb.auth.signInWithPassword({
+        email: document.getElementById('loginEmail').value.trim(),
+        password: document.getElementById('loginPassword').value,
+      });
+      btn.disabled = false;
+      if (error) return showMessage(msg, friendlyError(error));
+      render();
+    };
+
+    document.getElementById('signupForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      const msg = document.getElementById('signupMsg');
+      btn.disabled = true;
+      showMessage(msg, '');
+      const { data, error } = await sb.auth.signUp({
+        email: document.getElementById('signupEmail').value.trim(),
+        password: document.getElementById('signupPassword').value,
+        options: {
+          data: { full_name: document.getElementById('signupName').value.trim() },
+          emailRedirectTo: location.origin + location.pathname,
+        },
+      });
+      btn.disabled = false;
+      if (error) return showMessage(msg, friendlyError(error));
+      if (!data.session) {
+        return showMessage(msg, '注册成功！请去你的 email 点确认链接，然后回来登录。', 'ok');
+      }
+      render();
+    };
+
+    render();
+  </script>
 </body>
 </html>

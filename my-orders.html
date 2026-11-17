@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>我的 Order</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+      background: #f6f7f9;
+      color: #1f2937;
+    }
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header a { color: #2563eb; text-decoration: none; font-size: .95rem; }
+    header h1 { font-size: 1.15rem; margin: 0; flex: 1; }
+    main { max-width: 720px; margin: 0 auto; padding: 16px; }
+
+    .alerts {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+    }
+    .alerts h2 { font-size: 1rem; margin: 0 0 6px; }
+    .alerts ul { margin: 0; padding-left: 18px; }
+    .alerts li { margin: 4px 0; font-size: .92rem; }
+
+    .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+    .toolbar select, .toolbar input { flex: 1; min-width: 0; }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: #fff;
+    }
+    input:focus, select:focus, textarea:focus { outline: 2px solid #2563eb; border-color: #2563eb; }
+    .count { color: #6b7280; font-size: .9rem; margin: 0 0 8px; }
+
+    .order {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.06);
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      border-left: 4px solid transparent;
+    }
+    .order.late { border-left-color: #dc2626; }
+    .order .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+    .order .no { font-weight: 700; }
+    .order .amt { font-weight: 700; white-space: nowrap; }
+    .order .cust { font-weight: 600; margin-top: 2px; }
+    .order .line { color: #4b5563; font-size: .9rem; margin-top: 2px; }
+    .order .notes { color: #6b7280; font-size: .85rem; margin-top: 4px; word-break: break-word; }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: .8rem; font-weight: 600; background: #f3f4f6; color: #374151; }
+    .b-New { background: #eff6ff; color: #1d4ed8; }
+    .b-Confirmed { background: #f5f3ff; color: #6d28d9; }
+    .b-Out { background: #fff7ed; color: #c2410c; }
+    .b-Delivered { background: #ecfdf5; color: #047857; }
+    .b-Cancelled { background: #f3f4f6; color: #6b7280; }
+    .b-Unpaid { background: #fef2f2; color: #b91c1c; }
+    .b-Partial { background: #fffbeb; color: #b45309; }
+    .b-Paid { background: #ecfdf5; color: #047857; }
+    .b-late { background: #dc2626; color: #fff; }
+    .order .edit { margin-left: auto; }
+
+    button {
+      padding: 10px 16px;
+      border: 0;
+      border-radius: 8px;
+      background: #2563eb;
+      color: #fff;
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: .6; cursor: wait; }
+    button.secondary { background: #e5e7eb; color: #1f2937; }
+    button.small { padding: 6px 12px; font-size: .85rem; }
+    .empty { text-align: center; color: #6b7280; padding: 24px 0; }
+    .empty a { color: #2563eb; }
+    .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: .9rem; background: #fef2f2; color: #991b1b; }
+    .msg.ok { background: #ecfdf5; color: #065f46; }
+
+    dialog {
+      border: 0;
+      border-radius: 12px;
+      padding: 18px 16px;
+      width: calc(100% - 32px);
+      max-width: 480px;
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+    }
+    dialog::backdrop { background: rgba(0,0,0,.35); }
+    dialog h2 { font-size: 1.1rem; margin: 0 0 4px; }
+    dialog label { display: block; font-size: .9rem; margin: 12px 0 6px; font-weight: 500; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+    .amount { margin-top: 12px; padding: 10px 12px; background: #f9fafb; border-radius: 8px; display: flex; justify-content: space-between; }
+    .buttons { display: flex; gap: 8px; margin-top: 16px; }
+    .buttons button { flex: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html">← 主页</a>
+    <h1>我的 Order</h1>
+  </header>
+
+  <main hidden id="page">
+    <section class="alerts" id="alerts" hidden>
+      <h2>🔔 提醒：经理改了你的 order</h2>
+      <ul id="alertList"></ul>
+    </section>
+
+    <div class="toolbar">
+      <select id="filter">
+        <option value="open">还没送到的</option>
+        <option value="late">迟到的</option>
+        <option value="New">新单 New（可以改）</option>
+        <option value="Delivered">已送到</option>
+        <option value="Cancelled">取消</option>
+        <option value="all">全部</option>
+      </select>
+      <input id="search" type="search" placeholder="搜索单号、客户、货品…">
+    </div>
+    <p class="count" id="count"></p>
+    <div id="list"></div>
+  </main>
+
+  <!-- Edit an order (only while New) -->
+  <dialog id="editDialog">
+    <form id="editForm" method="dialog">
+      <h2 id="editTitle">修改 Order</h2>
+      <label for="eCustomer">客户</label>
+      <select id="eCustomer" required></select>
+      <label for="eItem">货品</label>
+      <input id="eItem" required maxlength="200">
+      <div class="row2">
+        <div>
+          <label for="eQty">数量</label>
+          <input id="eQty" type="number" inputmode="decimal" min="0.01" step="0.01" required>
+        </div>
+        <div>
+          <label for="ePrice">单价（RM）</label>
+          <input id="ePrice" type="number" inputmode="decimal" min="0" step="0.01" required>
+        </div>
+      </div>
+      <div class="amount"><span>金额</span><strong id="eAmount"></strong></div>
+      <label for="ePromised">答应送货日期</label>
+      <input id="ePromised" type="date" required>
+      <label for="eNotes">备注</label>
+      <textarea id="eNotes" rows="2" maxlength="500"></textarea>
+      <p class="msg" id="editMsg" hidden></p>
+      <div class="buttons">
+        <button type="button" class="secondary" id="editCancel">取消</button>
+        <button type="submit" id="editSave">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let me = null;
+    let orders = [];
+    let customers = [];
+    let editingId = null;
+
+    async function start() {
+      me = await requireRole(['staff', 'manager', 'owner']);
+      if (!me) return;
+      $('page').hidden = false;
+
+      const [{ data: c }, { data: s }] = await Promise.all([
+        sb.from('customers').select('id, name').order('name'),
+        sb.from('settings').select('value').eq('key', 'staff_alert_days').maybeSingle(),
+      ]);
+      customers = c || [];
+      $('eCustomer').innerHTML = customers.map(x => '<option value="' + x.id + '">' + escapeHtml(x.name) + '</option>').join('');
+
+      await load(Number(s && s.value) || 3);
+    }
+
+    async function load(alertDays) {
+      const { data, error } = await sb.from('orders')
+        .select('*, customers(name)')
+        .eq('created_by', me.user.id)
+        .order('promised_date', { ascending: true });
+      if (error) {
+        $('list').innerHTML = '<p class="msg">' + escapeHtml(friendlyError(error)) + '</p>';
+        return;
+      }
+      orders = data;
+      if (alertDays) drawAlerts(alertDays);
+      draw();
+    }
+
+    // Orders whose status someone else changed in the last N days
+    function drawAlerts(days) {
+      const since = Date.now() - days * 86400000;
+      const changed = orders
+        .filter(o => o.status_changed_at && o.status_changed_by && o.status_changed_by !== me.user.id
+                     && new Date(o.status_changed_at).getTime() >= since)
+        .sort((a, b) => b.status_changed_at.localeCompare(a.status_changed_at));
+      $('alerts').hidden = !changed.length;
+      $('alertList').innerHTML = changed.map(o =>
+        '<li><b>' + escapeHtml(o.order_no) + '</b>（' + escapeHtml(o.customers && o.customers.name) + '）'
+        + ' 现在是 <b>' + escapeHtml(STATUS_NAMES[o.status] || o.status) + '</b>'
+        + ' · ' + niceDate(o.status_changed_at) + '</li>').join('');
+    }
+
+    function draw() {
+      const f = $('filter').value;
+      const q = $('search').value.trim().toLowerCase();
+      const rows = orders.filter(o => {
+        if (f === 'open' && ['Delivered', 'Cancelled'].includes(o.status)) return false;
+        if (f === 'late' && !isLate(o)) return false;
+        if (['New', 'Delivered', 'Cancelled'].includes(f) && o.status !== f) return false;
+        if (!q) return true;
+        return [o.order_no, o.item, o.customers && o.customers.name].some(v => (v || '').toLowerCase().includes(q));
+      });
+
+      $('count').textContent = '共 ' + rows.length + ' 张单';
+      if (!rows.length) {
+        $('list').innerHTML = orders.length
+          ? '<p class="empty">这里没有单。试试换上面的选项。</p>'
+          : '<p class="empty">你还没开过单。<a href="new-order.html">去开第一张单</a></p>';
+        return;
+      }
+
+      $('list').innerHTML = rows.map(o => {
+        const late = isLate(o);
+        const statusClass = 'b-' + o.status.split(' ')[0];
+        const lines = [
+          escapeHtml(o.item) + ' · ' + Number(o.qty) + ' × ' + money(o.unit_price),
+          '答应送货：' + niceDate(o.promised_date)
+            + (o.delivered_date ? ' · 送到：' + niceDate(o.delivered_date) : ''),
+          o.due_date ? '付款到期：' + niceDate(o.due_date) : '',
+        ].filter(Boolean).map(t => '<div class="line">' + t + '</div>').join('');
+        return '<div class="order' + (late ? ' late' : '') + '">'
+          + '<div class="top"><span class="no">' + escapeHtml(o.order_no) + '</span>'
+          + '<span class="amt">' + money(o.amount) + '</span></div>'
+          + '<div class="cust">' + escapeHtml(o.customers && o.customers.name) + '</div>'
+          + lines
+          + (o.notes ? '<div class="notes">' + escapeHtml(o.notes) + '</div>' : '')
+          + '<div class="badges">'
+          + (late ? '<span class="badge b-late">迟到</span>' : '')
+          + '<span class="badge ' + statusClass + '">' + escapeHtml(STATUS_NAMES[o.status] || o.status) + '</span>'
+          + '<span class="badge b-' + o.payment_status + '">' + escapeHtml(PAYMENT_NAMES[o.payment_status] || o.payment_status) + '</span>'
+          + (o.status === 'New' ? '<button class="small secondary edit" data-edit="' + o.id + '">修改</button>' : '')
+          + '</div></div>';
+      }).join('');
+    }
+
+    function updateEditAmount() {
+      const amt = (Number($('eQty').value) || 0) * (Number($('ePrice').value) || 0);
+      $('eAmount').textContent = money(Math.round(amt * 100) / 100);
+    }
+
+    function openEdit(id) {
+      const o = orders.find(x => x.id === id);
+      if (!o) return;
+      editingId = id;
+      $('editTitle').textContent = '修改 ' + o.order_no;
+      $('eCustomer').value = o.customer_id;
+      $('eItem').value = o.item;
+      $('eQty').value = Number(o.qty);
+      $('ePrice').value = Number(o.unit_price);
+      $('ePromised').value = o.promised_date;
+      $('eNotes').value = o.notes || '';
+      updateEditAmount();
+      showMessage($('editMsg'), '');
+      $('editDialog').showModal();
+    }
+
+    $('editForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const msg = $('editMsg');
+      const qty = Number($('eQty').value);
+      const price = Number($('ePrice').value);
+      if (!$('eItem').value.trim()) return showMessage(msg, '请填货品。');
+      if (!(qty > 0)) return showMessage(msg, '数量要大过 0。');
+      if (!(price >= 0)) return showMessage(msg, '单价不能是负数。');
+      if (!$('ePromised').value) return showMessage(msg, '请选答应送货日期。');
+
+      $('editSave').disabled = true;
+      const { data, error } = await sb.from('orders').update({
+        customer_id: $('eCustomer').value,
+        item: $('eItem').value.trim(),
+        qty,
+        unit_price: price,
+        promised_date: $('ePromised').value,
+        notes: $('eNotes').value.trim() || null,
+      }).eq('id', editingId).select('id');
+      $('editSave').disabled = false;
+
+      if (error) return showMessage(msg, friendlyError(error));
+      if (!data || !data.length) {
+        showMessage(msg, '这张单已经被经理确认了，不能再改。有问题请找经理。');
+        await load();
+        return;
+      }
+      $('editDialog').close();
+      await load();
+    };
+
+    $('editCancel').onclick = () => $('editDialog').close();
+    $('eQty').oninput = updateEditAmount;
+    $('ePrice').oninput = updateEditAmount;
+    $('filter').onchange = draw;
+    $('search').oninput = draw;
+    $('list').onclick = (e) => {
+      const b = e.target.closest('button[data-edit]');
+      if (b) openEdit(b.dataset.edit);
+    };
+
+    start();
+  </script>
+</body>
+</html>

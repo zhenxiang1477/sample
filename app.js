@@ -44,6 +44,25 @@ function niceDate(value) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// Today's date in Malaysia as 'YYYY-MM-DD'
+function todayMY() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }).format(new Date());
+}
+
+const STATUS_NAMES = {
+  'New': '新单 New',
+  'Confirmed': '已确认 Confirmed',
+  'Out for delivery': '送货中 Out for delivery',
+  'Delivered': '已送到 Delivered',
+  'Cancelled': '取消 Cancelled',
+};
+const PAYMENT_NAMES = { 'Unpaid': '未付 Unpaid', 'Partial': '付了一部分 Partial', 'Paid': '已付 Paid' };
+
+// Late = promised date before today and not delivered/cancelled
+function isLate(order) {
+  return order.promised_date < todayMY() && !['Delivered', 'Cancelled'].includes(order.status);
+}
+
 function escapeHtml(text) {
   return String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

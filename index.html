@@ -66,6 +66,7 @@
       font-weight: 600;
     }
     .menu a:hover { border-color: #2563eb; color: #2563eb; }
+    .menu a[hidden] { display: none; }
     .soon { margin-top: 18px; padding: 12px; border-radius: 8px; background: #f9fafb; color: #4b5563; font-size: .9rem; }
   </style>
 </head>
@@ -119,6 +120,7 @@
       <h1 id="hello"></h1>
       <p class="sub"><span class="role" id="roleBadge"></span></p>
       <nav class="menu">
+        <a href="dashboard.html" id="dashLink" hidden>📊 Dashboard</a>
         <a href="new-order.html">新 Order</a>
         <a href="my-orders.html">我的 Order</a>
         <a href="customers.html">客户 Customers</a>
@@ -147,6 +149,7 @@
       }
       document.getElementById('hello').textContent = name + '，你好！';
       document.getElementById('roleBadge').textContent = ROLE_NAMES[p.role] || p.role;
+      document.getElementById('dashLink').hidden = !['manager', 'owner'].includes(p.role);
       show('homeView');
     }
 

@@ -63,6 +63,24 @@ function isLate(order) {
   return order.promised_date < todayMY() && !['Delivered', 'Cancelled'].includes(order.status);
 }
 
+// Overdue = due date before today and not Paid
+function isOverdue(order) {
+  return !!order.due_date && order.due_date < todayMY() && order.payment_status !== 'Paid' && order.status !== 'Cancelled';
+}
+
+// Whole days from date string a to date string b ('YYYY-MM-DD')
+function daysBetween(a, b) {
+  return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+}
+
+// WhatsApp link with the message pre-typed (a person still presses Send)
+function whatsappLink(phone, text) {
+  let digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('0')) digits = '6' + digits;   // Malaysia: 012... -> 6012...
+  return 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text);
+}
+
 function escapeHtml(text) {
   return String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }

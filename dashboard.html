@@ -105,6 +105,39 @@
     .saving { opacity: .5; pointer-events: none; }
     .empty { text-align: center; color: #6b7280; padding: 24px 0; }
     .msg { padding: 10px 12px; border-radius: 8px; font-size: .9rem; background: #fef2f2; color: #991b1b; margin-bottom: 12px; }
+    .msg.ok { background: #ecfdf5; color: #065f46; }
+    .bar .count { flex: 1; }
+    button.ai-btn, dialog button {
+      padding: 9px 14px; border: 0; border-radius: 8px; background: #2563eb; color: #fff;
+      font-size: .9rem; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    dialog button:disabled { opacity: .5; cursor: not-allowed; }
+    dialog {
+      border: 0; border-radius: 12px; padding: 16px;
+      width: calc(100% - 32px); max-width: 640px; max-height: calc(100vh - 32px);
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+    }
+    dialog::backdrop { background: rgba(0,0,0,.35); }
+    .ai-head { display: flex; justify-content: space-between; align-items: center; }
+    .ai-head h2 { margin: 0; font-size: 1.15rem; }
+    dialog button.close { background: #e5e7eb; color: #1f2937; padding: 6px 10px; }
+    .step { border-top: 1px solid #e5e7eb; margin-top: 14px; padding-top: 12px; }
+    .step h3 { font-size: .98rem; margin: 0 0 8px; }
+    .hint { color: #6b7280; font-size: .85rem; margin: 0 0 8px; }
+    textarea {
+      width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+      font-size: .9rem; font-family: inherit; resize: vertical;
+    }
+    .row-btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .link-btn {
+      padding: 9px 14px; border-radius: 8px; background: #e5e7eb; color: #1f2937;
+      text-decoration: none; font-weight: 600; font-size: .9rem;
+    }
+    .check { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; font-weight: 500; }
+    .check input { width: 18px; height: 18px; }
+    .brief { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+    .brief summary { cursor: pointer; font-weight: 600; font-size: .9rem; }
+    .brief pre { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: .88rem; margin: 8px 0 0; }
   </style>
 </head>
 <body>
@@ -178,9 +211,45 @@
     <div class="bar">
       <span class="count" id="count"></span>
       <button class="chip" id="clearKpi" hidden>✕ 清除 KPI 筛选</button>
+      <button class="ai-btn" id="aiBtn">🤖 AI 早报</button>
     </div>
     <div id="list"></div>
   </main>
+
+  <!-- AI morning brief -->
+  <dialog id="aiDialog">
+    <div class="ai-head">
+      <h2>🤖 AI 早报</h2>
+      <button class="close" id="aiClose" aria-label="关闭">✕</button>
+    </div>
+
+    <div class="step">
+      <h3>1. 复制这段文字</h3>
+      <p class="hint" id="aiSource"></p>
+      <textarea id="aiPrompt" rows="8" readonly></textarea>
+      <div class="row-btns">
+        <button type="button" id="aiCopy">📋 复制</button>
+        <a class="link-btn" href="https://claude.ai/new" target="_blank" rel="noopener">打开 Claude ↗</a>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3>2. 贴进 Claude，把 Claude 的回答贴在这里</h3>
+      <textarea id="aiResult" rows="8" placeholder="把 Claude 的回答贴在这里…"></textarea>
+    </div>
+
+    <div class="step">
+      <h3>3. 检查，然后保存</h3>
+      <label class="check"><input type="checkbox" id="aiChecked"> 我已经检查过，内容是对的</label>
+      <button type="button" id="aiSave" disabled>保存早报</button>
+      <p class="msg" id="aiMsg" hidden></p>
+    </div>
+
+    <div class="step">
+      <h3>以前的早报</h3>
+      <div id="aiHistory"><p class="hint">载入中…</p></div>
+    </div>
+  </dialog>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
@@ -192,6 +261,7 @@
     let redDays = 30;
     let kpiFilter = '';
     let today = todayMY();
+    let visibleRows = [];
 
     async function start() {
       const me = await requireRole(['manager', 'owner']);
@@ -284,6 +354,7 @@
       const rank = o => isRed(o) ? 0 : isLate(o) ? 1 : isOverdue(o) ? 2 : isDueToday(o) ? 3 : 4;
       rows.sort((a, b) => rank(a) - rank(b) || a.promised_date.localeCompare(b.promised_date));
 
+      visibleRows = rows;
       $('count').textContent = '共 ' + rows.length + ' 张单';
       $('list').innerHTML = rows.length ? rows.map(card).join('') : '<p class="empty">这里没有单。</p>';
     }
@@ -341,6 +412,100 @@
       if (error) alert(friendlyError(error));
       await load();
     });
+
+    // ---------- AI morning brief ----------
+    // Builds a prompt from the rows on screen. No AI key here: the manager runs it in Claude.
+    const MAX_BRIEF_ROWS = 80;
+
+    function buildPrompt(rows) {
+      const lines = rows.slice(0, MAX_BRIEF_ROWS).map(o => {
+        const flags = [
+          isRed(o) ? '红色(过期' + daysOverdue(o) + '天)' : isOverdue(o) ? '过期' + daysOverdue(o) + '天' : '',
+          isLate(o) ? '迟到' + daysBetween(o.promised_date, today) + '天' : '',
+          isDueToday(o) ? '今天要送' : '',
+        ].filter(Boolean).join('，');
+        return '- ' + o.order_no + ' | 客户：' + (o.customers && o.customers.name || '')
+          + ' | ' + o.item + ' × ' + Number(o.qty) + ' | ' + money(o.amount)
+          + ' | 答应送货：' + niceDate(o.promised_date)
+          + ' | 送货：' + o.status + ' | 付款：' + o.payment_status
+          + (o.due_date ? ' | 付款到期：' + niceDate(o.due_date) : '')
+          + (flags ? ' | ⚠ ' + flags : '');
+      });
+      const more = rows.length > MAX_BRIEF_ROWS ? '\n（另外还有 ' + (rows.length - MAX_BRIEF_ROWS) + ' 张单没列出）' : '';
+
+      return '你是我公司的运营助手。今天是 ' + niceDate(today) + '。\n'
+        + '下面是今天早上 Dashboard 上的 order（共 ' + rows.length + ' 张）。\n\n'
+        + '规则：\n'
+        + '- 迟到 = 答应送货日期已经过了，但还没送到\n'
+        + '- 过期 = 付款到期日已经过了，但还没付清\n'
+        + '- 红色 = 过期超过 ' + redDays + ' 天，要老板亲自打电话\n\n'
+        + 'Order：\n' + (lines.join('\n') || '（没有 order）') + more + '\n\n'
+        + '请用简单的中文，给我一份今天早上的行动清单：\n'
+        + '1. 先送货给谁（按先后排，说原因）\n'
+        + '2. 先追谁的钱（按先后排，写金额和过期天数）\n'
+        + '3. 老板要亲自打给哪些客户\n'
+        + '4. 今天要送的单，提醒确认 stock\n\n'
+        + '只用上面的资料，不要猜没有给你的东西。不要替我发任何消息给客户。';
+    }
+
+    async function loadHistory() {
+      const { data, error } = await sb.from('ai_briefs')
+        .select('id, created_at, created_by, result').order('created_at', { ascending: false }).limit(10);
+      if (error) return $('aiHistory').innerHTML = '<p class="hint">' + escapeHtml(friendlyError(error)) + '</p>';
+      $('aiHistory').innerHTML = data.length ? data.map(b =>
+        '<details class="brief"><summary>' + niceDate(b.created_at) + ' · '
+        + escapeHtml(staffNames[b.created_by] || '') + '</summary><pre>' + escapeHtml(b.result) + '</pre></details>'
+      ).join('') : '<p class="hint">还没有保存过早报。</p>';
+    }
+
+    function updateSaveBtn() {
+      $('aiSave').disabled = !($('aiChecked').checked && $('aiResult').value.trim());
+    }
+
+    $('aiBtn').onclick = () => {
+      $('aiPrompt').value = buildPrompt(visibleRows);
+      $('aiSource').textContent = '根据画面上现在显示的 ' + visibleRows.length + ' 张单。想要别的单，先关掉这个窗口，改上面的筛选。';
+      $('aiResult').value = '';
+      $('aiChecked').checked = false;
+      updateSaveBtn();
+      showMessage($('aiMsg'), '');
+      $('aiDialog').showModal();
+      loadHistory();
+    };
+
+    $('aiCopy').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText($('aiPrompt').value);
+      } catch (e) {
+        $('aiPrompt').select();
+        document.execCommand('copy');
+      }
+      $('aiCopy').textContent = '✅ 已复制';
+      setTimeout(() => $('aiCopy').textContent = '📋 复制', 2000);
+    };
+
+    $('aiResult').oninput = updateSaveBtn;
+    $('aiChecked').onchange = updateSaveBtn;
+    $('aiClose').onclick = () => $('aiDialog').close();
+
+    $('aiSave').onclick = async () => {
+      if (!$('aiChecked').checked) return showMessage($('aiMsg'), '请先勾"我已经检查过"。');
+      $('aiSave').disabled = true;
+      const { error } = await sb.from('ai_briefs').insert({
+        prompt: $('aiPrompt').value,
+        result: $('aiResult').value.trim(),
+        checked: true,
+      });
+      if (error) {
+        updateSaveBtn();
+        return showMessage($('aiMsg'), friendlyError(error));
+      }
+      showMessage($('aiMsg'), '✅ 早报已保存。', 'ok');
+      $('aiResult').value = '';
+      $('aiChecked').checked = false;
+      updateSaveBtn();
+      loadHistory();
+    };
 
     document.querySelectorAll('.kpi').forEach(k => k.onclick = () => {
       kpiFilter = kpiFilter === k.dataset.kpi ? '' : k.dataset.kpi;
